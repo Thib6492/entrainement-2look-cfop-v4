@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Entraînement 2-Look OLL / PLL</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --card: #1a1d24;
+    --card-border: #2a2e38;
+    --accent: #f5a623;
+    --accent2: #4fc3f7;
+    --text: #e8e9ec;
+    --text-dim: #9a9ea8;
+    --green: #4caf50;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 16px;
+    padding-bottom: 60px;
+  }
+  h1 { font-size: 1.3rem; margin: 0 0 4px 0; }
+  .subtitle { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 16px; }
+  .tabs {
+    display: flex; gap: 8px; margin-bottom: 16px;
+    position: sticky; top: 0; background: var(--bg); padding: 8px 0; z-index: 10;
+  }
+  .tab {
+    flex: 1; padding: 10px; text-align: center; background: var(--card);
+    border: 1px solid var(--card-border); border-radius: 10px; cursor: pointer;
+    font-weight: 600; font-size: 0.9rem;
+  }
+  .tab.active { background: var(--accent); color: #1a1a1a; border-color: var(--accent); }
+  .step-title {
+    font-size: 1rem; font-weight: 700; margin: 20px 0 4px 0; color: var(--accent2);
+    border-bottom: 1px solid var(--card-border); padding-bottom: 6px;
+  }
+  .step-desc { color: var(--text-dim); font-size: 0.8rem; margin-bottom: 10px; }
+  .legend {
+    display: flex; gap: 10px; flex-wrap: wrap; font-size: 0.72rem; color: var(--text-dim);
+    margin-bottom: 10px; align-items: center;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .case-card {
+    background: var(--card); border: 1px solid var(--card-border); border-radius: 12px;
+    padding: 12px 14px; margin-bottom: 10px;
+  }
+  .case-top { display: flex; gap: 12px; align-items: center; }
+  .case-name { font-weight: 600; font-size: 0.92rem; margin-bottom: 4px; }
+  .case-hint { font-size: 0.72rem; color: var(--text-dim); }
+  .diagram-wrap { flex-shrink: 0; }
+  .case-alg {
+    display: none; font-family: "SF Mono", Menlo, monospace; background: #0d0f13;
+    border-radius: 8px; padding: 8px 10px; font-size: 0.86rem;
+    color: var(--accent); letter-spacing: 0.3px;
+  }
+  .case-alg.shown { display: block; }
+  .case-scramble {
+    display: none; font-family: "SF Mono", Menlo, monospace; background: #101820;
+    border-radius: 8px; padding: 8px 10px; font-size: 0.86rem;
+    color: var(--accent2); letter-spacing: 0.3px; word-break: break-word;
+  }
+  .case-scramble.shown { display: block; }
+  .block-label {
+    display: none; align-items: center; gap: 5px; font-size: 0.68rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.5px; margin: 8px 0 4px 0;
+  }
+  .block-label.shown { display: flex; }
+  .block-label.alg { color: var(--accent); }
+  .block-label.scramble { color: var(--accent2); }
+  .btn-row { display: flex; gap: 6px; margin-top: 8px; }
+  button {
+    font-family: inherit; font-size: 0.76rem; border-radius: 8px; border: 1px solid var(--card-border);
+    background: #23262f; color: var(--text); padding: 7px 8px; cursor: pointer; flex: 1;
+  }
+  button:active { opacity: 0.7; }
+  button.primary { background: var(--accent2); color: #08131a; border-color: var(--accent2); font-weight: 600; }
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--green); color: white; padding: 8px 16px; border-radius: 20px;
+    font-size: 0.8rem; opacity: 0; transition: opacity 0.2s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+  .hidden { display: none; }
+  svg text { font-family: -apple-system, Arial, sans-serif; }
+</style>
+</head>
+<body>
+
+<h1>🧩 Entraînement 2-Look OLL / PLL</h1>
+<div class="subtitle">Algo + schéma (vue de dessus avec les côtés dépliés) + mélange dédié à chaque cas.</div>
+
+<div class="tabs">
+  <div class="tab active" id="tab-oll" onclick="switchTab('oll')">2-Look OLL</div>
+  <div class="tab" id="tab-pll" onclick="switchTab('pll')">2-Look PLL</div>
+</div>
+
+<div id="content-oll"></div>
+<div id="content-pll" class="hidden"></div>
+
+<div class="toast" id="toast">Copié !</div>
+
+<script>
+/* ============ Géométrie du diagramme (croix dépliée) ============
+   Face du dessus = centre 3x3 (cases 30px). Les 4 "rabats" autour
+   représentent la rangée du haut de chaque face latérale (F,B,L,R). */
+
+const CELL = 30;
+// positions des cases de la face du dessus
+const TOP = {
+  LB: [30,30], Bm: [60,30], RB: [90,30],
+  Lm: [30,60], C:  [60,60], Rm: [90,60],
+  LF: [30,90], Fm: [60,90], RF: [90,90]
+};
+// positions des cases des rabats (stickers latéraux visibles)
+const FLAP = {
+  'B-left':[30,0], 'B-mid':[60,0], 'B-right':[90,0],
+  'F-left':[30,120],'F-mid':[60,120],'F-right':[90,120],
+  'L-top':[0,30], 'L-mid':[0,60], 'L-bottom':[0,90],
+  'R-top':[120,30],'R-mid':[120,60],'R-bottom':[120,90]
+};
+
+const YELLOW = '#FFD54A';
+const GREY = '#4a4f5c';
+const STROKE = '#12141a';
+const COLORS = { F:'#43a047', R:'#e0483f', B:'#3d7fd6', L:'#fb8c00' };
+
+function rect(x,y,fill,label){
+  return `<rect x="${x}" y="${y}" width="${CELL}" height="${CELL}" fill="${fill}" stroke="${STROKE}" stroke-width="2"/>`;
+}
+
+function svgFrame(inner, extra){
+  return `<svg viewBox="-6 -6 162 162" width="118" height="118">
+    <rect x="-6" y="-6" width="162" height="162" fill="#0d0f13" rx="8"/>
+    ${inner}
+    ${extra||''}
+  </svg>`;
+}
+
+/* ---------- Diagramme OLL : orientation (jaune = oriente) ---------- */
+function ollDiagram(topOn, flapOn){
+  let s = '';
+  // rabats d'abord (dessous)
+  for (const k in FLAP){
+    const on = flapOn.includes(k);
+    s += rect(FLAP[k][0], FLAP[k][1], on ? YELLOW : GREY);
+  }
+  // face du dessus
+  const map = {LB:'LB',Bm:'B',RB:'RB',Lm:'L',C:'C',Rm:'R',LF:'LF',Fm:'F',RF:'RF'};
+  for (const k in TOP){
+    let fill;
+    if (k === 'C') fill = YELLOW;
+    else fill = topOn.includes(map[k]) ? YELLOW : GREY;
+    s += rect(TOP[k][0], TOP[k][1], fill);
+  }
+  // repère avant (F) en bas
+  const label = `<text x="60" y="146" text-anchor="middle" font-size="11" fill="#9a9ea8">avant</text>`;
+  return svgFrame(s, label);
+}
+
+/* ---------- Diagramme PLL : vraies couleurs + flèches ----------
+   Etat resolu de reference (une couleur = une face) : */
+const SOLVED_FLAP = {
+  'B-left':COLORS.B,'B-mid':COLORS.B,'B-right':COLORS.B,
+  'F-left':COLORS.F,'F-mid':COLORS.F,'F-right':COLORS.F,
+  'L-top':COLORS.L,'L-mid':COLORS.L,'L-bottom':COLORS.L,
+  'R-top':COLORS.R,'R-mid':COLORS.R,'R-bottom':COLORS.R
+};
+
+function pllBase(flapColorMap){
+  let s = '';
+  const fc = flapColorMap || SOLVED_FLAP;
+  for (const k in FLAP){
+    s += `<rect x="${FLAP[k][0]}" y="${FLAP[k][1]}" width="${CELL}" height="${CELL}" fill="${fc[k]}" fill-opacity="0.85" stroke="${STROKE}" stroke-width="2"/>`;
+  }
+  // face du dessus toute jaune (OLL deja fait)
+  for (const k in TOP){
+    s += rect(TOP[k][0], TOP[k][1], YELLOW);
+  }
+  return s;
+}
+
+function arrowDefs(){
+  return `<defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#ffffff"/>
+    </marker>
+  </defs>`;
+}
+
+function centerOf(pos){ // pos: TOP key
+  const [x,y] = TOP[pos];
+  return [x+CELL/2, y+CELL/2];
+}
+
+function doubleArrow(posA, posB){
+  const [x1,y1] = centerOf(posA);
+  const [x2,y2] = centerOf(posB);
+  return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#fff" stroke-width="3"
+    marker-start="url(#arrow)" marker-end="url(#arrow)"/>`;
+}
+
+function cycleArrow(posA, posB, curve){
+  const [x1,y1] = centerOf(posA);
+  const [x2,y2] = centerOf(posB);
+  const mx = (x1+x2)/2 + curve[0];
+  const my = (y1+y2)/2 + curve[1];
+  return `<path d="M${x1},${y1} Q${mx},${my} ${x2},${y2}" stroke="#fff" stroke-width="3" fill="none" marker-end="url(#arrow)"/>`;
+}
+
+// Coins : chaque position touche 2 rabats. Utilise pour construire la carte de couleurs.
+const CORNER_FLAPS = {
+  RB: ['R-top','B-right'], RF: ['R-bottom','F-right'],
+  LF: ['L-bottom','F-left'], LB: ['L-top','B-left']
+};
+const EDGE_FLAP_CELLS = ['B-mid','F-mid','L-mid','R-mid'];
+const CORNER_FLAP_CELLS = ['R-top','R-bottom','F-left','F-right','B-left','B-right','L-top','L-bottom'];
+
+// Grise les cases non decisionnelles pour ne garder en couleur que ce qui sert a reconnaitre le cas.
+function greyOutEdgeCells(map){
+  const fc = Object.assign({}, map);
+  EDGE_FLAP_CELLS.forEach(k => fc[k] = GREY);
+  return fc;
+}
+function greyOutCornerCells(map){
+  const fc = Object.assign({}, map);
+  CORNER_FLAP_CELLS.forEach(k => fc[k] = GREY);
+  return fc;
+}
+
+// Cas 1 : echange adjacent (2 coins qui partagent une face -> couleurs exactes)
+// ex: RF <-> RB partagent la face R : le sticker R reste rouge des 2 cotes,
+// seul le sticker "non partage" (F/B) est echange.
+function adjacentCornerSwapMap(posA, posB, sharedFlapA, sharedFlapB, otherFlapA, otherFlapB){
+  const fc = Object.assign({}, SOLVED_FLAP);
+  const otherColorA = SOLVED_FLAP[otherFlapA];
+  const otherColorB = SOLVED_FLAP[otherFlapB];
+  fc[otherFlapA] = otherColorB;
+  fc[otherFlapB] = otherColorA;
+  return fc;
+}
+
+// Cas 2 : echange en diagonale (aucune face commune -> pas de mapping unique,
+// on transpose simplement les 2 couleurs du binome pour montrer le contraste).
+function diagonalCornerSwapMap(posA, posB){
+  const fc = Object.assign({}, SOLVED_FLAP);
+  const [a1,a2] = CORNER_FLAPS[posA];
+  const [b1,b2] = CORNER_FLAPS[posB];
+  fc[a1] = SOLVED_FLAP[b2]; fc[a2] = SOLVED_FLAP[b1];
+  fc[b1] = SOLVED_FLAP[a2]; fc[b2] = SOLVED_FLAP[a1];
+  return fc;
+}
+
+function pllCornerDiagram(flapColorMap, swapA, swapB, fixedText){
+  const s = pllBase(flapColorMap) + arrowDefs() + doubleArrow(swapA, swapB);
+  const label = `<text x="60" y="146" text-anchor="middle" font-size="10" fill="#9a9ea8">avant</text>` +
+    (fixedText ? `<text x="60" y="9" text-anchor="middle" font-size="9" fill="#c9cdd6">${fixedText}</text>` : '');
+  return svgFrame(s, label);
+}
+
+function pllEdgeDiagramSwap(flapColorMap, pairs){
+  let arrows = '';
+  pairs.forEach(p => arrows += doubleArrow(p[0], p[1]));
+  const s = pllBase(flapColorMap) + arrowDefs() + arrows;
+  const label = `<text x="60" y="146" text-anchor="middle" font-size="10" fill="#9a9ea8">avant</text>`;
+  return svgFrame(s, label);
+}
+
+function pllEdgeDiagramCycle(flapColorMap, cycle, fixedPos){
+  // cycle: array of [from,to,curveOffset]
+  let arrows = '';
+  cycle.forEach(c => arrows += cycleArrow(c[0], c[1], c[2]));
+  const s = pllBase(flapColorMap) + arrowDefs() + arrows;
+  const [fx,fy] = centerOf(fixedPos);
+  const mark = `<circle cx="${fx}" cy="${fy}" r="4" fill="#fff" stroke="#000" stroke-width="1"/>`;
+  const label = `<text x="60" y="146" text-anchor="middle" font-size="10" fill="#9a9ea8">avant</text>
+    <text x="60" y="9" text-anchor="middle" font-size="9" fill="#c9cdd6">● = repère correct</text>`;
+  return svgFrame(s + mark, label);
+}
+
+/* ============ Données des cas (algos vérifiés) ============ */
+
+const OLL = {
+  title: "2-Look OLL — Orientation de la dernière couche",
+  legend: `<div class="legend">
+    <span><span class="swatch" style="background:${YELLOW}"></span>jaune visible</span>
+    <span><span class="swatch" style="background:${GREY}"></span>pas encore jaune</span>
+  </div>`,
+  steps: [
+    {
+      title: "Étape 1 — Orienter les arêtes (3 cas)",
+      desc: "Ignore les coins, regarde juste la forme jaune formée par les 4 arêtes du dessus.",
+      cases: [
+        { name: "Point (aucune arête orientée)", alg: "F R U R' U' F' Fw R U R' U' Fw'", setup: "Fw U R U' R' Fw' F U R U' R' F'",
+          diagram: ollDiagram([], ['B-mid','F-mid','L-mid','R-mid']) },
+        { name: "Ligne (I)", alg: "F R U R' U' F'", setup: "F U R U' R' F'",
+          diagram: ollDiagram(['L','R'], ['B-mid','F-mid']) },
+        { name: "Angle (L)", alg: "Fw R U R' U' Fw'", setup: "F R U R' U' F' U2",
+          diagram: ollDiagram(['F','R'], ['B-mid','L-mid']) }
+      ]
+    },
+    {
+      title: "Étape 2 — Orienter les coins (7 cas)",
+      desc: "Arêtes déjà orientées. Regarde l'arrangement des 4 coins.",
+      cases: [
+        { name: "Antisune", alg: "R U2 R' U' R U' R'", setup: "R U R' U R U2 R'",
+          diagram: ollDiagram(['RB','B','F','L','R'], ['R-bottom','F-left','L-top']) },
+        { name: "Sune", alg: "R U R' U R U2 R'", setup: "R U2 R' U' R U' R'",
+          diagram: ollDiagram(['LF','B','F','L','R'], ['R-top','F-right','B-left']) },
+        { name: "H", alg: "R U2 R' U' R U R' U' R U' R'", setup: "R U R' U R U' R' U R U2 R'",
+          diagram: ollDiagram(['B','F','L','R'], ['B-right','F-right','F-left','B-left']) },
+        { name: "Pi", alg: "R U2 R2 U' R2 U' R2 U2 R", setup: "R U2 R2 U' R2 U' R2 U2 R",
+          diagram: ollDiagram(['B','F','L','R'], ['B-right','F-right','L-bottom','L-top']) },
+        { name: "U", alg: "R2 D R' U2 R D' R' U2 R'", setup: "R U2 R D R' U2 R D' R2",
+          diagram: ollDiagram(['RB','LB','B','F','L','R'], ['F-right','F-left']) },
+        { name: "T", alg: "Rw U R' U' Rw' F R F'", setup: "F R' F' Rw U R U' Rw'",
+          diagram: ollDiagram(['RB','RF','B','F','L','R'], ['F-left','B-left']) },
+        { name: "L", alg: "F' Rw U R' U' Rw' F R", setup: "R' F' Rw U R U' Rw' F",
+          diagram: ollDiagram(['RF','LB','B','F','L','R'], ['R-top','F-left']) }
+      ]
+    }
+  ]
+};
+
+const PLL = {
+  title: "2-Look PLL — Permutation de la dernière couche",
+  legend: `<div class="legend">
+    <span><span class="swatch" style="background:${COLORS.F}"></span>avant</span>
+    <span><span class="swatch" style="background:${COLORS.R}"></span>droite</span>
+    <span><span class="swatch" style="background:${COLORS.B}"></span>arrière</span>
+    <span><span class="swatch" style="background:${COLORS.L}"></span>gauche</span>
+  </div>`,
+  steps: [
+    {
+      title: "Étape 1 — Permuter les coins (2 cas)",
+      desc: "Le dessus est déjà tout jaune (OLL fait). Regarde les couleurs sur les côtés : si un côté a 2 coins de la même couleur (\"phares\"), les 2 autres coins sont à échanger en diagonale ou côte à côte.",
+      cases: [
+        { name: "Diagonale (aucun côté avec des phares)", alg: "F R U' R' U' R U R' F' R U R' U' R' F R F'", setup: "F R U' R' U' R U R' F' R U R' U' R' F R F'",
+          diagram: pllCornerDiagram(greyOutEdgeCells(diagonalCornerSwapMap('RF','LB')), 'RF','LB', "aucune paire correcte") },
+        { name: "Adjacente (un côté avec des phares)", alg: "R U R' F' R U R' U' R' F R2 U' R'", setup: "R U R' F' R U R' U' R' F R2 U' R'",
+          diagram: pllCornerDiagram(greyOutEdgeCells({...SOLVED_FLAP, 'F-right':COLORS.B,'B-right':COLORS.F,'R-top':COLORS.B,'R-bottom':COLORS.F}), 'RF','RB', "paire correcte à gauche") }
+      ]
+    },
+    {
+      title: "Étape 2 — Permuter les arêtes (4 cas)",
+      desc: "Coins déjà en place. Regarde comment les 4 arêtes doivent bouger.",
+      cases: [
+        { name: "H-perm (arêtes opposées)", alg: "M2 U' (M2 U2 M2) U' M2", setup: "M2 U M2 U2 M2 U M2",
+          diagram: pllEdgeDiagramSwap(greyOutCornerCells({...SOLVED_FLAP, 'F-mid':COLORS.B,'B-mid':COLORS.F,'L-mid':COLORS.R,'R-mid':COLORS.L}), [['Fm','Bm'],['Lm','Rm']]) },
+        { name: "Z-perm (arêtes adjacentes, en Z)", alg: "M' U' (M2 U') (M2 U') M' U2 M2", setup: "M2 U2 M U M2 U M2 U M",
+          diagram: pllEdgeDiagramSwap(greyOutCornerCells({...SOLVED_FLAP, 'F-mid':COLORS.R,'R-mid':COLORS.F,'B-mid':COLORS.L,'L-mid':COLORS.B}), [['Fm','Rm'],['Bm','Lm']]) },
+        { name: "Ua-perm (cycle horaire)", alg: "M2 U' M U2 M' U' M2", setup: "M2 U M U2 M' U M2",
+          diagram: pllEdgeDiagramCycle({...greyOutCornerCells({...SOLVED_FLAP, 'F-mid':COLORS.R,'L-mid':COLORS.F,'R-mid':COLORS.L}), 'B-left':COLORS.B,'B-right':COLORS.B}, [['Rm','Fm',[-18,0]],['Fm','Lm',[0,18]],['Lm','Rm',[0,-40]]], 'Bm') },
+        { name: "Ub-perm (cycle antihoraire)", alg: "M2 U M U2 M' U M2", setup: "M2 U' M U2 M' U' M2",
+          diagram: pllEdgeDiagramCycle({...greyOutCornerCells({...SOLVED_FLAP, 'F-mid':COLORS.L,'R-mid':COLORS.F,'L-mid':COLORS.R}), 'B-left':COLORS.B,'B-right':COLORS.B}, [['Lm','Fm',[18,0]],['Fm','Rm',[0,18]],['Rm','Lm',[0,-40]]], 'Bm') }
+      ]
+    }
+  ]
+};
+
+let caseCounter = 0;
+
+function renderSet(data){
+  let html = `${data.legend}`;
+  data.steps.forEach(step => {
+    html += `<div class="step-title">${step.title}</div>`;
+    html += `<div class="step-desc">${step.desc}</div>`;
+    step.cases.forEach(c => {
+      const id = "case" + (caseCounter++);
+      html += `
+        <div class="case-card">
+          <div class="case-top">
+            <div class="diagram-wrap">${c.diagram}</div>
+            <div style="flex:1">
+              <div class="case-name">${c.name}</div>
+              <div class="case-hint">Vue de dessus, côtés dépliés autour</div>
+            </div>
+          </div>
+          <div class="block-label scramble" id="${id}-scrambleLabel">🔀 Mélange</div>
+          <div class="case-scramble" id="${id}-scramble"></div>
+          <div class="block-label alg" id="${id}-algLabel">🧩 Algorithme</div>
+          <div class="case-alg" id="${id}-alg">${c.alg}</div>
+          <div class="btn-row">
+            <button class="primary" onclick="genScramble('${id}', '${c.setup.replace(/'/g, "\\'")}')">🔀 Mélange</button>
+            <button onclick="toggleAlg('${id}')">Voir l'algo</button>
+            <button onclick="copyScramble('${id}')">Copier</button>
+          </div>
+        </div>`;
+    });
+  });
+  return html;
+}
+
+document.getElementById('content-oll').innerHTML = renderSet(OLL);
+document.getElementById('content-pll').innerHTML = renderSet(PLL);
+
+function switchTab(tab){
+  document.getElementById('tab-oll').classList.toggle('active', tab === 'oll');
+  document.getElementById('tab-pll').classList.toggle('active', tab === 'pll');
+  document.getElementById('content-oll').classList.toggle('hidden', tab !== 'oll');
+  document.getElementById('content-pll').classList.toggle('hidden', tab !== 'pll');
+}
+
+function toggleAlg(id){
+  document.getElementById(id + '-alg').classList.toggle('shown');
+  document.getElementById(id + '-algLabel').classList.toggle('shown');
+}
+
+function genScramble(id, setup){
+  const auf = ['', 'U ', "U' ", 'U2 '];
+  const randomAuf = auf[Math.floor(Math.random() * auf.length)];
+  const el = document.getElementById(id + '-scramble');
+  el.textContent = (randomAuf + setup).trim();
+  el.classList.add('shown');
+  document.getElementById(id + '-scrambleLabel').classList.add('shown');
+  el.dataset.setup = setup;
+}
+
+function copyScramble(id){
+  const el = document.getElementById(id + '-scramble');
+  if (!el.classList.contains('shown') || !el.textContent){
+    genScramble(id, el.dataset.setup || '');
+  }
+  navigator.clipboard.writeText(el.textContent).then(() => {
+    const toast = document.getElementById('toast');
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1200);
+  }).catch(() => {});
+}
+</script>
+
+</body>
+</html>
